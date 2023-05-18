@@ -1,0 +1,3 @@
+Step 1:
+	Allow the user to pass the -c option to the command to output the
+	number of bytes in a file.
