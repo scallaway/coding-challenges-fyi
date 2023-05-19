@@ -15,36 +15,45 @@ fn get_args() -> Vec<String> {
     return env::args().collect::<Vec<String>>()[1..].to_vec();
 }
 
+// TODO: This still needs to handle error messages gracefully
 fn parse_args(args: Vec<String>) -> String {
-    let arg = args.get(0);
-    let file_name = args.get(1);
+    // In _most_ cases, the first argument will be the flag, but if it's not,
+    // then it's the file name and we should show the default case for that.
 
-    // In the future, this will show the help screen
-    if arg.is_none() {
+    // In the future, this will show the help screen, but let's panic for the
+    // time being.
+    if args.len() == 0 {
         panic!("No arguments provided");
     }
 
-    // If there aren't any flags, then we return the default option
-    if file_name.is_none() {
-        let (file_as_string, file_as_bytes) = read_file_in_string_and_bytes(arg.unwrap());
-        return default_output(&file_as_string, &file_as_bytes, arg.unwrap().to_owned());
+    // Probably not the fastest since we're _always_ reading the file in two
+    // different formats, but it's more for convenience
+    let (file_as_string, file_as_bytes) = read_file_in_string_and_bytes(if args.get(1).is_none() {
+        args.get(0).unwrap()
+    } else {
+        args.get(1).unwrap()
+    });
+
+    // If there aren't any flags, then we return the default option using the
+    // first argument as the file name
+    if args.get(1).is_none() {
+        return default_output(
+            &file_as_string,
+            &file_as_bytes,
+            args.get(0).unwrap().to_owned(),
+        );
     }
-
-    let file_name = file_name.unwrap();
-
-    let file_as_string = std::fs::read_to_string(file_name).expect("Unable to read file");
-    let file_as_bytes = std::fs::read(file_name).expect("Unable to read file");
 
     format!(
         "{} {}",
-        match arg.unwrap().as_str() {
+        match args.get(0).unwrap().as_str() {
             "-c" => get_byte_count(&file_as_bytes),
             "-l" => get_line_count(&file_as_string),
             "-w" => get_word_count(&file_as_string),
             "-m" => get_char_count(&file_as_string),
             _ => todo!("Unrecognised command"),
         },
-        file_name
+        args.get(1).unwrap()
     )
 }
 
