@@ -1,6 +1,6 @@
 use core::str::FromStr;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Flags {
     Words,
     Lines,
@@ -10,9 +10,9 @@ pub enum Flags {
 }
 
 impl FromStr for Flags {
-    // TODO: Handle this error case properly
     type Err = ();
 
+    // TODO: Gracefully handle invalid flags
     fn from_str(arg_str: &str) -> Result<Flags, ()> {
         match arg_str {
             "-c" | "--bytes" => Ok(Flags::Bytes),
