@@ -1,0 +1,9 @@
+Further possible improvements:
+
+- Reading in larger files
+  - Think about reading the file bit by bit, rather than loading the whole file
+    into memory
+
+- Write tests for the tool
+  - It's woefully untested at the moment, worth adding tests in to verify the
+    functionality in the future

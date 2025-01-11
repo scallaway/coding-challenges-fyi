@@ -6,13 +6,12 @@ use std::{env, time::Instant};
 
 /// wc - print the number of lines, words, and bytes in files
 ///
-/// This is a re-implementation of the coreutils wc command, available at;
-/// https://git.savannah.gnu.org/cgit/coreutils.git/tree/src/wc.c
-///
+/// This solves the Coding Challenges "Build Your Own wc Tool" challenge found here:
+/// https://codingchallenges.fyi/challenges/challenge-wc
 fn main() {
     let now = Instant::now();
 
-    let wc = Engine::new(env::args());
+    let wc = Engine::new(env::args()).expect("Could not initialise engine");
 
     wc.run();
 

@@ -1,117 +1,127 @@
 use crate::flags::Flags;
-use std::io;
-use std::str::FromStr;
-use std::{env::Args, fs};
+use core::str::FromStr;
+use std::{env::Args, fs, io, io::Read};
 
-// TODO: Handle reading from stdin
 #[derive(Debug)]
 pub struct Engine {
     pub file_name: Option<String>,
-    // This is optional as there may not be any flags, in the event that we're
-    // just displaying the default values
-    pub flag: Option<Flags>,
+    /// The input type to read from, whether that's a file name or stdin
+    pub content: String,
+    /// Any flags that have been parsed as valid to the program
+    pub flags: Vec<Flags>,
 }
 
+// The beating heart of the program, where all the computation takes place
 impl Engine {
-    pub fn new(args: Args) -> Engine {
+    pub fn new(args: Args) -> io::Result<Engine> {
         // We can always start from the second argument in the list as the
         // first is _always_ the program name
+        // TODO: Panic in the event the above isn't true
         let args = args.collect::<Vec<String>>()[1..].to_vec();
 
-        Engine {
-            file_name: get_file_name(&args),
-            flag: if &args.len() > &1 {
-                Some(Flags::from_str(&get_flag_from_args(&args)).expect("Could not parse flag"))
+        let flags = get_flags_from_args(&args)
+            .into_iter()
+            .filter_map(|flag| {
+                if let Ok(parsed_flag) = Flags::from_str(flag) {
+                    Some(parsed_flag)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let file_name = get_file_name_from_args(&args);
+
+        Ok(Engine {
+            file_name: file_name.clone(),
+            content: if let Some(file_name) = file_name {
+                fs::read_to_string(&file_name).expect("Unable to find file")
             } else {
-                None
+                // We only want to try to read from stdin when we haven't been given a file to try
+                // and read from - otherwise we'll hang indefinitely.
+                let mut buffer = String::new();
+                let mut stdin = io::stdin();
+
+                while let Ok(bytes_read) = stdin.read_to_string(&mut buffer) {
+                    if bytes_read == 0 {
+                        break;
+                    }
+                }
+
+                buffer
             },
-        }
+            flags,
+        })
     }
 
     pub fn run(&self) {
-        println!("{:?}", self);
-        if let None = self.file_name {
-            self.show_missing();
-            return;
+        if self.flags.len() == 0 {
+            return self.run_default();
         }
-
-        if self.flag.is_none() {
-            self.run_default();
-            return;
-        }
-
-        let file_name = &self.file_name.clone().unwrap();
-
-        if self.flag.unwrap() == Flags::Bytes {
-            println!(
-                "{}",
-                format!(
-                    "{} {}",
-                    fs::metadata(&file_name)
-                        .expect("Couldn't find file specified")
-                        .len() as usize,
-                    &file_name
-                )
-            );
-            return;
-        }
-
-        let file = fs::read_to_string(&file_name).expect("Couldn't read file into string");
-
-        let statistic = match self.flag.unwrap() {
-            Flags::Lines => file.lines().count(),
-            Flags::Chars => file.chars().collect::<Vec<char>>().len(),
-            Flags::Words => self.get_word_count(&file),
-            Flags::LongestLine => self.get_longest_line(&file),
-            // We shouldn't be able to get here since it's handled above in the if statement
-            Flags::Bytes => return,
-        };
-
-        println!("{}", format!("{} {}", statistic, &file_name));
-    }
-
-    fn run_default(&self) {
-        let file_name = &self.file_name.clone().unwrap();
-        let file = fs::read_to_string(&file_name).expect("Couldn't read file into string");
-        let lines = get_adjusted_line_count(&file);
-        let words = self.get_word_count(&file);
-        let bytes = file.as_bytes().len();
 
         println!(
             "{}",
-            format!("{} {} {} {}", lines, words, bytes, &file_name)
+            format!(
+                "{} {}",
+                &self.get_statistics_line(),
+                self.file_name.clone().unwrap_or("".to_string())
+            )
         );
     }
 
-    fn get_word_count(&self, file: &String) -> usize {
-        let lines = file.lines();
+    fn run_default(&self) {
+        let lines = get_adjusted_line_count(&self.content);
+        let words = self.get_word_count();
+        let bytes = self.content.as_bytes().len();
+
+        println!(
+            "{}",
+            format!(
+                "{} {} {} {}",
+                lines,
+                words,
+                bytes,
+                // We don't want to try and show the file name if we don't have one
+                &self.file_name.clone().unwrap_or("".to_string()),
+            )
+        );
+    }
+
+    fn get_word_count(&self) -> usize {
+        let lines = &self.content.lines();
         let line_count = lines.clone().count();
-        lines.take(line_count - 1).fold(0, |acc, line| {
+        lines.clone().take(line_count - 1).fold(0, |acc, line| {
             acc + line.split_whitespace().collect::<Vec<&str>>().len()
         })
     }
 
-    fn get_longest_line(&self, file: &String) -> usize {
-        file.lines().fold(
-            0,
-            |acc, line| {
-                if line.len() > acc {
-                    line.len()
-                } else {
-                    acc
-                }
-            },
-        )
+    fn get_longest_line(&self) -> usize {
+        self.content.lines().fold(0, |acc, line| {
+            if line.len() > acc {
+                line.len()
+            } else {
+                acc
+            }
+        })
     }
 
-    fn show_missing(&self) {
-        println!(
-            "{}",
-            format!(
-                "No such file or directory {}",
-                self.file_name.clone().unwrap()
-            )
-        );
+    fn get_statistics_line(&self) -> String {
+        self.flags
+            .iter()
+            .map(|flag| {
+                return match flag {
+                    Flags::Bytes => self.content.as_bytes().len(),
+                    Flags::Lines => self.content.lines().count(),
+                    Flags::Chars => {
+                        self.content.chars().collect::<Vec<char>>().len()
+                    }
+                    Flags::Words => self.get_word_count(),
+                    Flags::LongestLine => self.get_longest_line(),
+                };
+            })
+            .map(|v| v.to_string())
+            .collect::<Vec<String>>()
+            .join(" ")
     }
 }
 
@@ -134,26 +144,10 @@ fn get_adjusted_line_count(file: &String) -> usize {
     };
 }
 
-fn get_file_name(args: &Vec<String>) -> Option<String> {
-    if let Some(file_name) = args.iter().find(|&arg| !arg.starts_with("-")) {
-        return Some(file_name.to_string());
-    }
-
-    let mut buffer = String::new();
-    let result = io::stdin().read_line(&mut buffer);
-
-    if result.is_err() {
-        return None;
-    }
-
-    return Some(buffer);
+fn get_file_name_from_args(args: &Vec<String>) -> Option<String> {
+    return args.iter().find(|&arg| !arg.starts_with("-")).cloned();
 }
 
-/// Returns the first string that it find that does start with a hyphen
-fn get_flag_from_args(args: &Vec<String>) -> String {
-    return args
-        .iter()
-        .find(|&arg| arg.starts_with("-"))
-        .unwrap()
-        .to_owned();
+fn get_flags_from_args(args: &Vec<String>) -> Vec<&String> {
+    args.iter().filter(|&arg| arg.starts_with("-")).collect()
 }
